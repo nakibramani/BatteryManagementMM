@@ -6,6 +6,13 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
+from korad import Kel103, KoradUdpComm
+comm = KoradUdpComm("10.11.1.16", "10.11.0.200")
+kel = Kel103(comm)
+test = main(kel)
+test.Home()
+
+
 bat_test_data = {
             'setting_id': 2,
             'max_current': 30,
@@ -196,15 +203,15 @@ class mainClass(object):
 
     def Home(self):
         print("MinMaster Battery Management Database V1.0: \n\n")
-        ID = self.ScanBarcode()
-        my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(ID))
+        self.ID = self.ScanBarcode()
+        my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(self.ID))
         x = my_cursor.fetchall()
         if not x: 
             print('Not Found')
             print('Redirecting to New battery test ')
             self.TestBattery()
         else:
-            my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(ID))
+            my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(self.ID))
             for y in my_cursor:
                 print(y)
             
@@ -236,34 +243,56 @@ class mainClass(object):
                 elif Status=='3':
                     Status = "Out of Service"
 
-                my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, ID))
-                print("Battery Status of battery {0} is updated to {1}".format(ID, Status))
+                my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, self.ID))
+                print("Battery Status of battery {0} is updated to {1}".format(self.ID, Status))
 
             elif Look==2: 
                 NewCapacity = input("Please enter new battery capacity: ")
                 #NewCapacity = int (NewCapacity)
                 
-                my_cursor.execute("UPDATE batteryDatabase set Capacity = {0} WHERE BatteryID = '{1}'".format(NewCapacity,ID))
-                print("Battery Capacity of battery '{0}' is updated to {1}".format(ID, NewCapacity))
+                my_cursor.execute("UPDATE batteryDatabase set Capacity = {0} WHERE BatteryID = '{1}'".format(NewCapacity,self.ID))
+                print("Battery Capacity of battery '{0}' is updated to {1}".format(self.ID, NewCapacity))
             elif Look==3: 
                 NewMachine = input("Please enter Machie information : ")
                 
-                my_cursor.execute("UPDATE batteryDatabase set Machine = '{0}' WHERE BatteryID = '{1}'".format(NewMachine, ID))
-                print("Battery Capacity of battery '{0}' is updated to '{1}'".format(ID, NewMachine))
+                my_cursor.execute("UPDATE batteryDatabase set Machine = '{0}' WHERE BatteryID = '{1}'".format(NewMachine, self.ID))
+                print("Battery Capacity of battery '{0}' is updated to '{1}'".format(self.ID, NewMachine))
             elif Look == 4:
                 self.TestBattery()
 
     def TestBattery(self):
-        #declaring all the variables refer Kel103 lib to modify (currently only done for CC)
-        cutOffVoltage = input("Enter Cutt-Off Voltage: ")
-        cutOffCapacity = input("Enter Cutt-Off Capacity: ")
-        dischargeRate = input("Enter discharge Current: ")
-        timeStop = input("Enter Stop Time = ")
-        maxCurrent = input("Enter max current = ")
-        data = {"setting_id":"2", "max_current":maxCurrent, "set_current":dischargeRate, "voltage_cutoff":cutOffVoltage, "capacity_cutoff":cutOffCapacity, "time_cutoff":timeStop}
+        self.test = KelBatteryDischargeTest(kel)
+        print("Please select one of the following options: ")
+        print("1. Perform standard battery test")
+        print("2. Perform custom battery test")
+        print("3. Return to Main Menu")
+        #takes user input
+        tst = input("Enter a number from 1-4 to select an option")
+        print(tst)
 
+        tst = int(tst)
 
-        kel.setOutput(False)
-        print(kel.measure_all_params)
-        StartTest = input("Enter anything to begin the test, or press 0 to reselect")
+        while tst!=1 and tst!=2 and tst!=3:
+            print("Invalid Entry")
+            tst = input("Enter a number from 1-3 to select an option")
 
+        if tst==1:
+            self.test.setup_for_test(self.ID, True, 30, 2.6, 999)
+        elif tst==2:
+            confirmParameters= 1
+            while confirmParameters:
+                cutOffVoltage = input("Enter Cutt-Off Voltage: ")
+                cutOffCapacity = input("Enter Cutt-Off Capacity: ")
+                dischargeRate = input("Enter discharge Current: ")
+                timeStop = input("Enter Stop Time = ")
+                x = input("Please confirm all parameters by a number between 1-10")
+                if x>0 and x<11:
+                    confirmParameters=0
+            confirmParameters = 1
+            self.test.setup_for_test(self.ID, True, dischargeRate, cutOffVoltage, cutOffCapacity, timeStop)
+        elif tst==3:
+            self.Home()
+        
+        
+        test.run_test()
+        test.export_results()
