@@ -1,4 +1,5 @@
-from datetime import datetime
+from calendar import c
+from datetime import datetime, date
 import time
 import socket
 from asammdf import MDF, Signal
@@ -6,10 +7,13 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
+import mysql.connector
+from mysql.connector import Error
+
 from korad import Kel103, KoradUdpComm
 comm = KoradUdpComm("10.11.1.16", "10.11.0.200")
 kel = Kel103(comm)
-test = main(kel)
+test = mainClass(kel)
 test.Home()
 
 
@@ -24,19 +28,21 @@ bat_test_data = {
 kel.set_battery_data(bat_test_data)
 
 
-import mysql.connector
-from mysql.connector import Error
 try:
     databaseConnect = {'host':'localhost',
         'user': 'root',
         'password' "password123"
-        'database': 'Electronics',
         'raise_on_warnings': True,
         'use_pure': False,
         'autocommit': True,}
 
 
-    mydb = mysql.connector.connect(**databaseConnect)
+    mydb = mysql.connector.connect(host="localhost",
+        user="root",
+        password="password123",
+        database= "test123",
+        autocommit= True
+    )
 
     if mydb.is_connected():
         db_Info = mydb.get_server_info()
@@ -46,14 +52,18 @@ try:
 except Error as e:
     print("Error while connecting to MySQL", e)
 
+
 #creating a databse
-my_cursor.execute("CREATE DATABASE test123")
+#my_cursor.execute("CREATE DATABASE test123")
 
 #creating a table
-my_cursor.execute("CREATE TABLE batteryDatabase (BatteryID VARCHAR(255) PRIMARY KEY, Status VARCHAR(255) NOT NULL, Capacity INTEGER NOT NULL, DateTested DATE NOT NULL,Machine VARCHAR(255))")
-my_cursor.execute("show tables")
+#my_cursor.execute("CREATE TABLE batteryDatabase (BatteryID VARCHAR(255) PRIMARY KEY, Status VARCHAR(255) NOT NULL, Capacity INTEGER NOT NULL, DateTested DATE NOT NULL,Machine VARCHAR(255))")
+#my_cursor.execute("show tables")
 
-#one-time use only
+#inserting syntax
+sqlInsertion = "INSERT INTO batterydatabase (BatteryID, Status, Capacity, DateTested, Machine) VALUES (%s,%s,%s,%s,%s)"
+battery1= ("1235a7", "Good", 4000, '2005-11-11', 8)
+#my_cursor.execute(sqlInsertion, battery1)
 
 
 class BatteryTestData(object):
@@ -168,6 +178,10 @@ class KelBatteryDischargeTest(object):
                     time.sleep(self.measurement_period)
                 except socket.timeout:
                     print("Missed test data point at: {}".format(datetime.now()))
+
+            if self.check_end_test():
+                retData = mainClass()
+                retData.DatabaseEntry("New", self.c)
             
         except KeyboardInterrupt:
             print("keyboard interrupt encountered, exiting test")
@@ -285,7 +299,7 @@ class mainClass(object):
                 cutOffCapacity = input("Enter Cutt-Off Capacity: ")
                 dischargeRate = input("Enter discharge Current: ")
                 timeStop = input("Enter Stop Time = ")
-                x = input("Please confirm all parameters by a number between 1-10")
+                x = input("Confirm all parameters by a number between 1-10")
                 if x>0 and x<11:
                     confirmParameters=0
             confirmParameters = 1
@@ -296,3 +310,16 @@ class mainClass(object):
         
         test.run_test()
         test.export_results()
+
+    def DatabaseEntry(self, Status, NewCapacity):
+        #entry into database
+        my_cursor = mydb.cursor()
+        my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(self.ID))
+        x = my_cursor.fetchall()
+        if not x: #create new entry
+            battery1 = (self.ID, 'Status', self.capacity, date.today())
+            my_cursor.execute(sqlInsertion, battery1)
+        else:
+            my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, self.ID))
+            my_cursor.execute("UPDATE batteryDatabase set Capacity = {0} WHERE BatteryID = '{1}'".format(NewCapacity,self.ID))
+            my_cursor.execute("UPDATE batteryDatabase set DateTested = {0} WHERE BatteryID = '{1}'".format(date.today(),self.ID))
