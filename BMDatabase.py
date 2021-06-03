@@ -312,8 +312,17 @@ class mainClass(object):
         test.export_results()
 
     def DatabaseEntry(self, Status, NewCapacity):
-        #entry into database
         my_cursor = mydb.cursor()
+        if NewCapacity>=5000:
+            Status = "New"
+        elif NewCapacity>=3000 and NewCapacity<5000:
+            Status = "Good"
+        elif NewCapacity>3000:
+            Status = "Out of Service"
+            print("Press a number from 1-10 to delete '{}' battery data: ".format(self.ID))
+            my_cursor.execute("DELETE FROM customers WHERE  BatteryID= {0}".format(*self.ID))
+        #entry into database
+        
         my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(self.ID))
         x = my_cursor.fetchall()
         if not x: #create new entry
