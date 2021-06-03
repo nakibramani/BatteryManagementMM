@@ -10,12 +10,6 @@ import matplotlib.pyplot as plt
 import mysql.connector
 from mysql.connector import Error
 
-from korad import Kel103, KoradUdpComm
-comm = KoradUdpComm("10.11.1.16", "10.11.0.200")
-kel = Kel103(comm)
-test = mainClass(kel)
-test.Home()
-
 
 bat_test_data = {
             'setting_id': 2,
@@ -54,7 +48,7 @@ except Error as e:
 
 
 #creating a databse
-#my_cursor.execute("CREATE DATABASE test123")
+#my_cursor.execute("CREATE DATABASE MMBatteryDB")
 
 #creating a table
 #my_cursor.execute("CREATE TABLE batteryDatabase (BatteryID VARCHAR(255) PRIMARY KEY, Status VARCHAR(255) NOT NULL, Capacity INTEGER NOT NULL, DateTested DATE NOT NULL,Machine VARCHAR(255))")
@@ -234,7 +228,8 @@ class mainClass(object):
             print("1. Update battery status")
             print("2. Update battery Capacity")
             print("3. Update battery's Machine")
-            print("4. Test Battery Again & Update")
+            print("4. Test Battery Again & Auto-update")
+            print("5. Return to Main Menu")
             #takes user input
             Look = input("Enter a number from 1-4 to select an option")
             print(Look)
@@ -243,37 +238,64 @@ class mainClass(object):
 
             while Look!=1 and Look!=2 and Look!=3 and Look!=4:
                 print("Invalid Entry")
-                Look = input("Enter a number from 1-3 to select an option")
+                try:
+                    Look = int(input("Enter a number from 1-4 to select an option"))
+                except ValueError:
+                    print("Not an integer!!!")
 
             if Look==1:
                 print("Select Status options: ")
                 print("1. New")
                 print("2. Good")
-                Status = input("3. Out of Service   ")
-                if Status=='1':
+                print("3. Out of Service")
+                print("4. Return to Main Menu")
+                Status = int(input("Please enter a number from 1-3 to select battery status:  "))
+                while Status!=1 and Status!=2 and Status!=3:
+                    print("Invalid Entry")
+                    try:
+                        Status = int(input("Enter a number from 1-3 to select an option"))
+                    except ValueError:
+                        print("Not an integer!!!")
+
+                if Status==1:
                     Status = "new"
-                elif Status=='2':
+                elif Status==2:
                     Status = "Good"
-                elif Status=='3':
+                elif Status==3:
                     Status = "Out of Service"
+                elif Status ==4:
+                    self.Home()
 
                 my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, self.ID))
                 print("Battery Status of battery {0} is updated to {1}".format(self.ID, Status))
+                self.Home()
 
             elif Look==2: 
-                NewCapacity = input("Please enter new battery capacity: ")
-                #NewCapacity = int (NewCapacity)
+                z=1
+                while z:
+                    try:
+                        NewCapacity = int(input("Please enter new battery capacity: "))
+                    except ValueError:
+                        print("Not an Integer! Try again.")
+                        continue
+                    else:
+                        z=0
+                    #NewCapacity = int (NewCapacity)
                 
                 my_cursor.execute("UPDATE batteryDatabase set Capacity = {0} WHERE BatteryID = '{1}'".format(NewCapacity,self.ID))
                 print("Battery Capacity of battery '{0}' is updated to {1}".format(self.ID, NewCapacity))
+                self.Home()
             elif Look==3: 
-                NewMachine = input("Please enter Machie information : ")
+                NewMachine = input("Please enter Machine information : ")
                 
                 my_cursor.execute("UPDATE batteryDatabase set Machine = '{0}' WHERE BatteryID = '{1}'".format(NewMachine, self.ID))
                 print("Battery Capacity of battery '{0}' is updated to '{1}'".format(self.ID, NewMachine))
+                self.Home()
             elif Look == 4:
                 self.TestBattery()
-
+                self.Home()
+            elif Look ==5:
+                self.Home()
     def TestBattery(self):
         self.test = KelBatteryDischargeTest(kel)
         print("Please select one of the following options: ")
@@ -288,7 +310,10 @@ class mainClass(object):
 
         while tst!=1 and tst!=2 and tst!=3:
             print("Invalid Entry")
-            tst = input("Enter a number from 1-3 to select an option")
+            try:
+                tst = int(input("Enter a number from 1-3 to select an option"))
+            except ValueError:
+                    print("Not an integer!!!")
 
         if tst==1:
             self.test.setup_for_test(self.ID, True, 30, 2.6, 999)
