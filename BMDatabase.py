@@ -57,7 +57,7 @@ except Error as e:
 #my_cursor.execute("CREATE TABLE Tests (TestID int PRIMARY KEY AUTO_INCREMENT, BatteryID VARCHAR(255) NOT NULL, FOREIGN KEY(BatteryID) REFERENCES batterydatabase(BatteryID), TestDate DATE NOT NULL, CapacityMeasured int NOT NULL)")
 #my_cursor.execute("CREATE TABLE TestData (Time TIME PRIMARY KEY NOT NULL, TestID int NOT NULL, FOREIGN KEY(TestID) REFERENCES Tests(TestID), Voltage decimal NOT NULL, Capacitance decimal NOT NULL)")
 sqlInsertion = "INSERT INTO batterydatabase (BatteryID, Status, Capacity, DateTested, Machine) VALUES (%s,%s,%s,%s,%s)"
-TestSQLInsertion = "INSERT INTO tests (BatteryID, TestDate, CapacityMeasured) VALUES (%s, %s, %s)"
+TestSQLInsertion = "INSERT INTO tests (BatteryID, TestDate, CapacityMeasured, Current) VALUES (%s, %s, %s, %s)"
 DataSQLInsertion = "INSERT INTO testdata (Time, TestID, Voltage, Capacitance) VALUES (%s, %s, %s, %s)"
 
 
@@ -129,6 +129,8 @@ class KelBatteryDischargeTest(object):
     def setup_for_test(self, cell_id, use_rear_voltage_measure, set_current, voltage_cutoff, capacity_cutoff=99, time_cutoff=99):
         if self.test_data == None:
             self.test_data = BatteryTestData(cell_id)
+            self.ID = cell_id
+            self.dischargeRate = set_current
         self.kel.check_device()
         self.bat_test_data = {
             'setting_id': 2,
@@ -155,12 +157,12 @@ class KelBatteryDischargeTest(object):
         v = self.kel.measure_voltage()
         c = self.kel.measure_current()
         p = self.kel.measure_power()
-        cap = self.kel.get_battery_capacity()
+        self.cap = self.kel.get_battery_capacity()
         t = self.kel.get_battery_time()
-        testData = mainClass(self) 
-        testData.TestsDatabaseEntry(t, v, cap)
-        time.sleep(10)
-        return {'v': v, 'c': c, 'p': p, 'cap': cap, 't': t}
+        #testData = mainClass(self.kel)      ###################################################################
+        #testData.TestsDatabaseEntry(t, v, cap)
+        #time.sleep(10)
+        return {'v': v, 'c': c, 'p': p, 'cap': self.cap, 't': t}
 
 
     def run_test(self):
@@ -190,8 +192,8 @@ class KelBatteryDischargeTest(object):
                     print("Missed test data point at: {}".format(datetime.now()))
 
             if self.check_end_test():
-                retData = mainClass()
-                retData.DatabaseEntry(self.c)                      ################################################################
+                retData = mainClass(self.kel)
+                retData.DatabaseEntry(self.ID, self.cap, self.dischargeRate)                      ################################################################
             
         except KeyboardInterrupt:
             print("keyboard interrupt encountered, exiting test")
@@ -315,6 +317,7 @@ class mainClass(object):
                 self.Home()
 
     def TestBattery(self):
+        print(self.ID)
         self.test = KelBatteryDischargeTest(self.kel)
         print("Please select one of the following options: ")
         print("1. Perform standard battery test")
@@ -340,27 +343,30 @@ class mainClass(object):
                 cutOffCapacity = 999
                 self.dischargeRate = 7
                 timeStop = 120
-                self.test.setup_for_test(self.ID, True, 7, 2.6, 999, 120)
             elif tst==2:
                 confirmParameters= 1
-                while confirmParameters:
-                    cutOffVoltage = input("Enter Cutt-Off Voltage: ")
-                    cutOffCapacity = input("Enter Cutt-Off Capacity: ")
-                    self.dischargeRate = input("Enter discharge Current: ")
-                    timeStop = input("Enter Stop Time = ")
+                while confirmParameters==1:
+                    cutOffVoltage = float(input("Enter Cutt-Off Voltage: "))
+                    cutOffCapacity = float(input("Enter Cutt-Off Capacity: "))
+                    self.dischargeRate = float(input("Enter discharge Current: "))
+                    timeStop = int(input("Enter Stop Time = "))
+                    confirmParameters = input("Enter 0 to confirm parameters: ")
+                    print("Cutt-off Voltage = {0}, Cutt-off Capacity = {1}, Discharge Rate = {2}, Time Stop = {3}".format(cutOffVoltage, cutOffCapacity, self.dischargeRate, timeStop))
                     
-                self.test.setup_for_test(self.ID, True, self.dischargeRate, cutOffVoltage, cutOffCapacity, timeStop)
+                
             elif tst==3:
                 self.Home()
             
             print("Please press Y to confirm the parameters, or press anything to cancel: ")
             print("Cutt-off Voltage = {0}, Cutt-off Capacity = {1}, Discharge Rate = {2}, Time Stop = {3}".format(cutOffVoltage, cutOffCapacity, self.dischargeRate, timeStop))
             x = input()
+            self.test.setup_for_test(self.ID, True, self.dischargeRate, cutOffVoltage, cutOffCapacity, timeStop)
         
         self.test.run_test()
         self.test.export_results()
 
-    def DatabaseEntry(self, NewCapacity, Status=None):
+    def DatabaseEntry(self, ID, NewCapacity, dischargeRate, Status=None):
+        print(ID)
         my_cursor = mydb.cursor()
         if NewCapacity>=5000 and Status is not None:
             Status = "New"
@@ -368,26 +374,29 @@ class mainClass(object):
             Status = "Good"
         elif NewCapacity>3000 and Status is not None:
             Status = "Out of Service"
-            print("Press a number from Y to delete '{}' battery data from ALL databases: ".format(self.ID))
-            my_cursor.execute("DELETE FROM batteryDatabase WHERE BatteryID= {0}".format(self.ID))
-            my_cursor.execute("DELETE FROM tests WHERE BatteryID= {0}".format(self.ID))
+            print("Press a number from Y to delete '{}' battery data from ALL databases: ".format(ID))
+            #my_cursor.execute("DELETE FROM batteryDatabase WHERE BatteryID= {0}".format(self.ID))
+            #my_cursor.execute("DELETE FROM tests WHERE BatteryID= {0}".format(self.ID))
         #entry into database
         
-        my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(self.ID))
+        my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(ID))
+        
         x = my_cursor.fetchall()
         if not x: #create new entry
-            battery1 = (self.ID, 'Status', self.capacity, date.today())
+            battery1 = (ID, Status, NewCapacity, date.today())
             my_cursor.execute(sqlInsertion, battery1)
 
-            test1= (self.ID, date.today(), self.capacity, self.dischargeRate)
+            test1= (ID, date.today(), NewCapacity, dischargeRate)
             my_cursor.execute(TestSQLInsertion, test1)
         else:
-            my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, self.ID))
-            my_cursor.execute("UPDATE batteryDatabase set Capacity = {0} WHERE BatteryID = '{1}'".format(NewCapacity,self.ID))
-            my_cursor.execute("UPDATE batteryDatabase set DateTested = {0} WHERE BatteryID = '{1}'".format(date.today(),self.ID))
+            my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, ID))
+           
+            my_cursor.execute("UPDATE batteryDatabase set Capacity = {0} WHERE BatteryID = '{1}'".format(NewCapacity,ID))
+            #print("Battery status updated to '{}', for battery ID '{1}'".format(NewCapacity, self.ID))
+            my_cursor.execute("UPDATE batteryDatabase set DateTested = CURRENT_DATE() WHERE BatteryID = '{0}'".format(ID))
             
             #add to tests
-            test1= (self.ID, date.today(), self.capacity, self.dischargeRate)
+            test1= (ID, date.today(), NewCapacity, dischargeRate)
             my_cursor.execute(TestSQLInsertion, test1)
 
 
@@ -395,8 +404,9 @@ class mainClass(object):
         my_cursor.execute("SELECT MAX(TestID)  FROM tests")
         x = my_cursor.fetchall()
         T = str(x).strip('[](),')
-        print(Time)
-        testdata= (Time, T, Voltage, Capacity)
+        timestamp = datetime.fromtimestamp(Time)
+        Time = timestamp.strftime('%M:%S')
+        testdata= (Time, T , Voltage, Capacity)
         my_cursor.execute(DataSQLInsertion, testdata)
 
 
