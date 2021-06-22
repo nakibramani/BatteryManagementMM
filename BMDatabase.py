@@ -7,69 +7,11 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from kel103 import Kel103
-
-import mysql.connector
-from mysql.connector import Error
-
-"""
-bat_test_data = {
-            'setting_id': 2,
-            'max_current': 30,
-            'set_current': 1,
-            'voltage_cutoff': 3.5,
-            'capacity_cutoff': 10,
-            'time_cutoff': 10
-        }
-kel.set_battery_data(bat_test_data)
-"""
-
-try:
-    databaseConnect = {'host':'localhost',
-        'user': 'root',
-        'password' "password123"
-        'raise_on_warnings': True,
-        'use_pure': False,
-        'autocommit': True,
-        }
+import BatteryDatabase as BD
 
 
-    mydb = mysql.connector.connect(host="localhost",
-        user="root",
-        password="password123",
-        database= "test123",
-        autocommit= True
-    )
-
-    if mydb.is_connected():
-        db_Info = mydb.get_server_info()
-        print("Connected to MySQL Server version ", db_Info)
-        #creating cursor instance
-        my_cursor = mydb.cursor()
-except Error as e:
-    print("Error while connecting to MySQL", e)
 
 
-#creating a databse
-#my_cursor.execute("CREATE DATABASE MMBatteryDB")
-
-#creating a table
-#my_cursor.execute("CREATE TABLE batteryDatabase (BatteryID VARCHAR(255) PRIMARY KEY, Status VARCHAR(255) NOT NULL, Capacity INTEGER NOT NULL, DateTested DATE NOT NULL,Machine VARCHAR(255))")
-#my_cursor.execute("CREATE TABLE Tests (TestID int PRIMARY KEY AUTO_INCREMENT, BatteryID VARCHAR(255) NOT NULL, FOREIGN KEY(BatteryID) REFERENCES batterydatabase(BatteryID), TestDate DATE NOT NULL, CapacityMeasured int NOT NULL)")
-#my_cursor.execute("CREATE TABLE TestData (Time TIME PRIMARY KEY NOT NULL, TestID int NOT NULL, FOREIGN KEY(TestID) REFERENCES Tests(TestID), Voltage decimal NOT NULL, Capacitance decimal NOT NULL)")
-sqlInsertion = "INSERT INTO batterydatabase (BatteryID, Status, Capacity, DateTested, Machine) VALUES (%s,%s,%s,%s,%s)"
-TestSQLInsertion = "INSERT INTO tests (BatteryID, TestDate, CapacityMeasured, Current) VALUES (%s, %s, %s, %s)"
-DataSQLInsertion = "INSERT INTO testdata (Time, TestID, Voltage, Capacitance) VALUES (%s, %s, %s, %s)"
-
-
-#battery1= ("NSA721512071160", "Good", 4000, date.today(), 8)
-#my_cursor.execute(sqlInsertion, battery1)
-
-
-#test1= ("NSA721512071160", date.today(), 8000)
-#my_cursor.execute(TestSQLInsertion, test1)
-
-#testdata= (Time, date.today(), 8000)
-#my_cursor.execute(DataSQLInsertion, testdata)
 
 class BatteryTestData(object):
     def __init__(self, cell_id, start_time=datetime.now()):
@@ -159,9 +101,9 @@ class KelBatteryDischargeTest(object):
         p = self.kel.measure_power()
         self.cap = self.kel.get_battery_capacity()
         t = self.kel.get_battery_time()
-        #testData = mainClass(self.kel)      ###################################################################
-        #testData.TestsDatabaseEntry(t, v, cap)
-        #time.sleep(10)
+        testData = mainClass(self.kel)      ###################################################################
+        testData.TestsDatabaseEntry(t, v, self.cap)
+        time.sleep(10)
         return {'v': v, 'c': c, 'p': p, 'cap': self.cap, 't': t}
 
 
@@ -219,12 +161,14 @@ class mainClass(object):
         self.kel = kel_device
         self.measurement_period = measurement_period
 
+        self.Battery_DB = BD.database()
+
     def ScanBarcode(self):
         #Scans barcode data
         BarcodeData = input("Scan a barcode now:")
         print(BarcodeData)
 
-        while len(BarcodeData)!=15:
+        while len(BarcodeData)<15 and len(BarcodeData)>20:
             print("Wrong barcode Data!!!")
             BarcodeData = input("Scan a barcode now:")
             print(BarcodeData)
@@ -232,19 +176,23 @@ class mainClass(object):
         return BarcodeData
 
     def Home(self):
+        
+
+
         print("MinMaster Battery Management Database V1.0: \n\n")
 
         self.ID = self.ScanBarcode()
-        my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(self.ID))
-        
-        x = my_cursor.fetchall()
+        x = self.Battery_DB.batteryDatabase_Fetch(self.ID)
         if not x: 
             print('Not Found')
             print('Redirecting to New battery test: ')
+            self.Battery_DB.batteryDatabase_entry(self.ID)
+            
             self.TestBattery()
+
         else:
-            my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(self.ID))
-            for y in my_cursor:
+            x = self.Battery_DB.batteryDatabase_Fetch(self.ID)
+            for y in x:
                 print(y)
             
             print("\n ")
@@ -282,35 +230,33 @@ class mainClass(object):
                         print("Not an integer!!!")
 
                 if Status==1:
-                    Status = "new"
+                    Status = "New"
                 elif Status==2:
                     Status = "Good"
                 elif Status==3:
                     Status = "Out of Service"
                 elif Status ==4:
                     self.Home()
-
-                my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, self.ID))
+                self.Battery_DB.batteryDatabase_Update(self.ID, Status)
                 print("Battery Status of battery {0} is updated to {1}".format(self.ID, Status))
                 self.Home()
 
             elif Look==2: 
                 NewMachine = input("Please enter Machine information : ")
-                
-                my_cursor.execute("UPDATE batteryDatabase set Machine = '{0}' WHERE BatteryID = '{1}'".format(NewMachine, self.ID))
+                self.Battery_DB.batteryDatabase_UpdateMachine(self.ID, NewMachine)
                 print("Battery Capacity of battery '{0}' is updated to '{1}'".format(self.ID, NewMachine))
                 self.Home()
             elif Look == 3:
                 self.TestBattery()
                 self.Home()
             elif Look == 4:
-                my_cursor.execute("SELECT * FROM Tests WHERE BatteryID = '{0}'".format(self.ID))
-                for y in my_cursor:
+                x = self.Battery_DB.Tests_Fetch(self.ID)
+                for y in x:
                     print(y)
                 
                 a = input("Press 1 to lookup the graph of preview battery test")
                 if a:
-                    TestID = 1
+                    TestID = int(input("Enter TestID"))
                     self.getGraph(TestID)
                 self.Home()
             elif Look ==5:
@@ -328,7 +274,7 @@ class mainClass(object):
         print(tst)
 
         tst = int(tst)
-
+        
         while tst!=1 and tst!=2 and tst!=3:
             print("Invalid Entry")
             try:
@@ -339,83 +285,71 @@ class mainClass(object):
         x = "y"
         while x =="y":
             if tst==1:
+                self.Battery_DB.TestData_entry(self.ID)
                 cutOffVoltage = 2.6
                 cutOffCapacity = 999
                 self.dischargeRate = 7
                 timeStop = 120
             elif tst==2:
+                self.Battery_DB.TestData_entry(self.ID)
                 confirmParameters= 1
                 while confirmParameters==1:
                     cutOffVoltage = float(input("Enter Cutt-Off Voltage: "))
                     cutOffCapacity = float(input("Enter Cutt-Off Capacity: "))
                     self.dischargeRate = float(input("Enter discharge Current: "))
                     timeStop = int(input("Enter Stop Time = "))
-                    confirmParameters = input("Enter 0 to confirm parameters: ")
+                    confirmParameters = input("Press Enter to confirm parameters: ")
                     print("Cutt-off Voltage = {0}, Cutt-off Capacity = {1}, Discharge Rate = {2}, Time Stop = {3}".format(cutOffVoltage, cutOffCapacity, self.dischargeRate, timeStop))
                     
-                
             elif tst==3:
                 self.Home()
             
             print("Please press Y to confirm the parameters, or press anything to cancel: ")
             print("Cutt-off Voltage = {0}, Cutt-off Capacity = {1}, Discharge Rate = {2}, Time Stop = {3}".format(cutOffVoltage, cutOffCapacity, self.dischargeRate, timeStop))
             x = input()
+            if x != "Y":
+                self.Home()
             self.test.setup_for_test(self.ID, True, self.dischargeRate, cutOffVoltage, cutOffCapacity, timeStop)
         
         self.test.run_test()
         self.test.export_results()
 
-    def DatabaseEntry(self, ID, NewCapacity, dischargeRate, Status=None):
+    def DatabaseEntry(self, ID, NewCapacity, dischargeRate):
         print(ID)
-        my_cursor = mydb.cursor()
-        if NewCapacity>=5000 and Status is not None:
+        
+        if NewCapacity>=5000:
             Status = "New"
-        elif NewCapacity>=3000 and NewCapacity<5000 and Status is not None:
+        elif NewCapacity>=3000 and NewCapacity<5000:
             Status = "Good"
-        elif NewCapacity>3000 and Status is not None:
+        elif NewCapacity<3000:
             Status = "Out of Service"
-            print("Press a number from Y to delete '{}' battery data from ALL databases: ".format(ID))
-            #my_cursor.execute("DELETE FROM batteryDatabase WHERE BatteryID= {0}".format(self.ID))
-            #my_cursor.execute("DELETE FROM tests WHERE BatteryID= {0}".format(self.ID))
+            deleteData = input("Press Y to delete '{}' battery data from ALL databases: ".format(ID))
+            if deleteData == "Y":
+                self.Battery_DB.deleteAll(ID)
+                
         #entry into database
-        
-        my_cursor.execute("SELECT * FROM batteryDatabase WHERE BatteryID = '{0}'".format(ID))
-        
-        x = my_cursor.fetchall()
+        x = self.Battery_DB.batteryDatabase_Fetch(ID)
         if not x: #create new entry
+            #done earlier
             battery1 = (ID, Status, NewCapacity, date.today())
-            my_cursor.execute(sqlInsertion, battery1)
+            #my_cursor.execute(sqlInsertion, battery1)
 
             test1= (ID, date.today(), NewCapacity, dischargeRate)
-            my_cursor.execute(TestSQLInsertion, test1)
+            #my_cursor.execute(TestSQLInsertion, test1)
         else:
-            my_cursor.execute("UPDATE batteryDatabase set Status = '{0}' WHERE BatteryID = '{1}'".format(Status, ID))
-           
-            my_cursor.execute("UPDATE batteryDatabase set Capacity = {0} WHERE BatteryID = '{1}'".format(NewCapacity,ID))
-            #print("Battery status updated to '{}', for battery ID '{1}'".format(NewCapacity, self.ID))
-            my_cursor.execute("UPDATE batteryDatabase set DateTested = CURRENT_DATE() WHERE BatteryID = '{0}'".format(ID))
-            
-            #add to tests
-            test1= (ID, date.today(), NewCapacity, dischargeRate)
-            my_cursor.execute(TestSQLInsertion, test1)
+            self.Battery_DB.batteryDatabase_Update(ID, Status, NewCapacity)          
 
+            self.Battery_DB.Tests_Update(ID, NewCapacity, dischargeRate)  
 
     def TestsDatabaseEntry(self, Time, Voltage, Capacity):
-        my_cursor.execute("SELECT MAX(TestID)  FROM tests")
-        x = my_cursor.fetchall()
-        T = str(x).strip('[](),')
-        timestamp = datetime.fromtimestamp(Time)
-        Time = timestamp.strftime('%M:%S')
-        testdata= (Time, T , Voltage, Capacity)
-        my_cursor.execute(DataSQLInsertion, testdata)
-
+        self.Battery_DB.TestData_Entry(Time, Voltage, Capacity)
 
     def getGraph(self, TestID):
         Volt = []
         cap = []
-        my_cursor.execute("SELECT Voltage, Capacitance FROM testdata WHERE TestID = {} ORDER BY TIME".format(TestID))
 
-        for (Voltage, Capacitance) in my_cursor:
+        x = self.Battery_DB.testData_Fetch(TestID)
+        for (Voltage, Capacitance) in x:
             print("{0}  , {1} ".format(Voltage, Capacitance))
             
             #TimeAsInt = int(Time)
@@ -423,9 +357,12 @@ class mainClass(object):
             Volt.append(Voltage)
             cap.append(Capacitance)
         fig = plt.figure()
-
+        plt.subplot(1,2,1)
         plt.plot(Volt, label='Voltage')
-        plt.show()
-
+        plt.title("Voltage")
+        
+        plt.subplot(1,2,2)
         plt.plot(cap, label='Capacity')
+        plt.title("Capacity")
         plt.show()
+        
